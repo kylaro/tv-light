@@ -1,0 +1,21 @@
+# tvlightd build + runtime image. Same image runs on the Fedora dev box and on SteamOS.
+ARG FEDORA=44
+
+FROM registry.fedoraproject.org/fedora:${FEDORA} AS dev
+RUN dnf -y install --setopt=install_weak_deps=False \
+      gcc-c++ cmake ninja-build pkgconf-pkg-config \
+      pipewire-devel libportal-devel glib2-devel \
+    && dnf clean all
+
+FROM dev AS build
+COPY protocol /src/protocol
+COPY host /src/host
+RUN cmake -S /src/host -B /build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+    && cmake --build /build
+
+FROM registry.fedoraproject.org/fedora:${FEDORA}
+RUN dnf -y install --setopt=install_weak_deps=False pipewire-libs libportal glib2 \
+    && dnf clean all
+COPY --from=build /build/tvlightd /usr/local/bin/tvlightd
+COPY host/web /usr/local/share/tvlight/web
+ENTRYPOINT ["/usr/local/bin/tvlightd", "--web-dir", "/usr/local/share/tvlight/web"]

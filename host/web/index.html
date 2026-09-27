@@ -1,0 +1,493 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d0f14">
+<title>TV Light</title>
+<style>
+  :root {
+    --bg: #0d0f14; --card: #161a22; --line: #262c38; --text: #e7eaf0; --dim: #8a93a6;
+    --accent: #ff9a3c; --ok: #3ecf8e; --warn: #f5b942; --bad: #ef5a5a;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+         padding: 12px 16px calc(24px + env(safe-area-inset-bottom)); }
+  main { max-width: 920px; margin: 0 auto; display: grid; gap: 12px; }
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+  h1 { font-size: 20px; margin: 0; letter-spacing: .2px; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip { font-size: 12px; padding: 3px 9px; border-radius: 999px; background: var(--card);
+          border: 1px solid var(--line); color: var(--dim); white-space: nowrap; }
+  .chip b { color: var(--text); font-weight: 600; }
+  .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px;
+         background: var(--dim); vertical-align: 1px; }
+  .dot.ok { background: var(--ok); } .dot.warn { background: var(--warn); } .dot.bad { background: var(--bad); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; }
+  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .8px; color: var(--dim); margin: 0 0 8px; }
+  canvas { width: 100%; display: block; border-radius: 10px; }
+  #preview { aspect-ratio: 16 / 10.2; background: #000; }
+  #bassGraph { height: 90px; background: #0b0d12; }
+  .meter { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; font-variant-numeric: tabular-nums; }
+  .meter .bar { flex: 1; height: 10px; border-radius: 6px; background: #0b0d12; overflow: hidden; }
+  .meter .fill { height: 100%; width: 0; background: linear-gradient(90deg, #ff6a3c, #ffd23c); }
+  .msg { color: var(--dim); font-size: 13px; margin-top: 6px; word-break: break-word; }
+  details { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); }
+  summary { cursor: pointer; padding: 12px; font-weight: 600; list-style: none; display: flex; justify-content: space-between; }
+  summary::after { content: "▾"; color: var(--dim); }
+  details[open] summary::after { content: "▴"; }
+  .controls { display: grid; gap: 10px; padding: 0 12px 12px; grid-template-columns: 1fr; }
+  @media (min-width: 640px) { .controls { grid-template-columns: 1fr 1fr; column-gap: 20px; } }
+  .ctl { display: grid; gap: 4px; }
+  .ctl label { display: flex; justify-content: space-between; font-size: 13px; color: var(--dim); }
+  .ctl label span:last-child { color: var(--text); font-variant-numeric: tabular-nums; }
+  .ctl .hint { font-size: 12px; color: var(--dim); }
+  input[type=range] { width: 100%; accent-color: var(--accent); height: 28px; }
+  select, input[type=text], input[type=number] { width: 100%; background: #0b0d12; color: var(--text);
+          border: 1px solid var(--line); border-radius: 8px; padding: 8px; font: inherit; }
+  .range-row { display: flex; gap: 8px; align-items: center; }
+  .range-row input[type=range] { flex: 1; min-width: 0; }
+  .range-row input[type=number] { width: 84px; flex: none; padding: 6px; }
+  input[type=color] { width: 100%; height: 38px; background: none; border: 1px solid var(--line); border-radius: 8px; }
+  .toggle { display: flex; align-items: center; justify-content: space-between; min-height: 36px; }
+  .toggle input { width: 22px; height: 22px; accent-color: var(--accent); }
+  button { background: var(--accent); color: #1b1206; border: 0; border-radius: 10px; padding: 10px 14px;
+           font: inherit; font-weight: 600; cursor: pointer; }
+  button.secondary { background: #262c38; color: var(--text); }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; font-size: 13px; }
+  .stats div { background: #0b0d12; border-radius: 8px; padding: 8px; }
+  .stats span { display: block; color: var(--dim); font-size: 11px; text-transform: uppercase; letter-spacing: .6px; }
+  .banner { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+            margin-top: 10px; padding: 10px 12px; border-radius: 10px;
+            background: #2a1c14; border: 1px solid #5a3a22; }
+  .banner[hidden] { display: none; }
+  code { font-size: 12px; color: var(--dim); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>TV Light</h1>
+    <div class="chips">
+      <span class="chip" id="chipVideo"><span class="dot"></span>Screen <b>–</b></span>
+      <span class="chip" id="chipAudio"><span class="dot"></span>Audio <b>–</b></span>
+      <span class="chip" id="chipPico"><span class="dot"></span>Pico <b>–</b></span>
+      <span class="chip" id="chipFps">Out <b>–</b></span>
+    </div>
+  </header>
+
+  <section class="card">
+    <h2>Preview</h2>
+    <canvas id="preview"></canvas>
+    <div class="msg" id="videoMsg"></div>
+    <div class="banner" id="captureBanner" hidden>
+      <span id="captureBannerText">Screen access was denied.</span>
+      <button id="captureRetry">Request screen access</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Bass</h2>
+    <div class="meter"><div class="bar"><div class="fill" id="bassFill"></div></div><span id="bassVal">0.00</span></div>
+    <canvas id="bassGraph"></canvas>
+    <div class="msg">Orange: bass value sent to the Pico (after smoothing). Grey: low-passed envelope ÷ reference (auto gain peak). Red dashes: threshold.</div>
+  </section>
+
+  <div id="panels"></div>
+
+  <section class="card">
+    <h2>Status</h2>
+    <div class="stats" id="stats"></div>
+    <div class="msg"><code id="picoLine"></code></div>
+  </section>
+</main>
+
+<script>
+"use strict";
+// ---- control schema: path in config JSON -> widget ----
+const PANELS = [
+  { title: "Brightness & bass", open: true, controls: [
+    { path: "brightness", label: "Total brightness", type: "range", min: 0, max: 255, step: 1,
+      describe: v => `${Math.round(v / 2.55)}%` },
+    { path: "bass.share", label: "Bass share of brightness", type: "range", min: 0, max: 1, step: 0.01,
+      describe: v => `${Math.round((1 - v) * 100)}% always on · ${Math.round(v * 100)}% bass`,
+      hint: "LED level = total × (always on + bass share × bass)." },
+    { path: "bass.smoothing_ms", label: "Bass smoothing (ms)", type: "range", min: 0, max: 500, step: 1,
+      hint: "Exponential moving average on the bass value. 0 = raw, larger = slower and smoother." },
+    { path: "bass.lowpass_hz", label: "Bass low-pass cutoff (Hz)", type: "range", min: 20, max: 250, step: 1 },
+    { path: "smoothing_ms", label: "Color smoothing (ms)", type: "range", min: 0, max: 1000, step: 5,
+      hint: "Exponential moving average on the screen colors." },
+  ]},
+  { title: "Output", controls: [
+    { path: "mode", label: "Mode", type: "select", options: ["ambient", "solid", "rainbow", "off"] },
+    { path: "solid_color", label: "Solid color", type: "color" },
+    { path: "max_current_ma", label: "Current limit (mA, 0 = off)", type: "range", min: 0, max: 10000, step: 100 },
+    { path: "dither", label: "Temporal dithering", type: "bool" },
+    { path: "interpolate", label: "Frame interpolation on the Pico", type: "bool" },
+    { path: "fps", label: "LED frames per second", type: "range", min: 10, max: 144, step: 1 },
+    { path: "audio_block", label: "Audio block (samples @ 48 kHz)", type: "select", options: [128, 256, 512, 1024],
+      hint: "Bass update rate: 128 ≈ 375 Hz, 256 ≈ 188 Hz, 512 ≈ 94 Hz. Smaller also shrinks PipeWire's quantum for everything." },
+    { path: "capture_fps", label: "Screen capture fps", type: "range", min: 5, max: 144, step: 1,
+      hint: "Each captured frame costs the compositor a full-screen copy. 30 is plenty for ambient color." },
+  ]},
+  { title: "Bass detail", controls: [
+    { path: "bass.enabled", label: "Enabled", type: "bool" },
+    { path: "bass.floor", label: "Floor (glow in dark scenes)", type: "range", min: 0, max: 1, step: 0.01 },
+    { path: "bass.threshold", label: "Threshold", type: "range", min: 0, max: 0.95, step: 0.01 },
+    { path: "bass.curve", label: "Curve (>1 = punchier)", type: "range", min: 0.25, max: 4, step: 0.05 },
+    { path: "bass.highpass_hz", label: "High-pass (Hz)", type: "range", min: 5, max: 100, step: 1 },
+    { path: "bass.attack_ms", label: "Attack (ms)", type: "range", min: 0.5, max: 100, step: 0.5 },
+    { path: "bass.release_ms", label: "Release (ms)", type: "range", min: 10, max: 1000, step: 5 },
+    { path: "bass.agc", label: "Auto gain (follow recent peak)", type: "bool" },
+    { path: "bass.agc_decay_s", label: "Auto gain memory (s)", type: "range", min: 0.5, max: 60, step: 0.5 },
+    { path: "bass.sensitivity", label: "Manual sensitivity (auto gain off)", type: "range", min: 0.1, max: 100, step: 0.1 },
+  ]},
+  { title: "Color", controls: [
+    { path: "saturation", label: "Saturation", type: "range", min: 0, max: 3, step: 0.05 },
+    { path: "screen_gamma", label: "Screen gamma (higher = more contrast)", type: "range", min: 1, max: 3.5, step: 0.05 },
+    { path: "white_r", label: "White balance R", type: "range", min: 0, max: 1, step: 0.01 },
+    { path: "white_g", label: "White balance G", type: "range", min: 0, max: 1, step: 0.01 },
+    { path: "white_b", label: "White balance B", type: "range", min: 0, max: 1, step: 0.01 },
+  ]},
+  { title: "LED layout", controls: [
+    { path: "layout.left", label: "Left LEDs", type: "number", min: 0, max: 300 },
+    { path: "layout.top", label: "Top LEDs", type: "number", min: 0, max: 300 },
+    { path: "layout.right", label: "Right LEDs", type: "number", min: 0, max: 300 },
+    { path: "layout.bottom", label: "Bottom LEDs", type: "number", min: 0, max: 300 },
+    { path: "layout.offset", label: "Offset (loop position of first LED)", type: "number", min: -1000, max: 1000,
+      hint: "Loop starts bottom-left, going up the left side. Watch the white marker in the preview." },
+    { path: "layout.direction", label: "Direction (seen from the front)", type: "select", options: ["cw", "ccw"] },
+    { path: "layout.skip", label: "Skipped LEDs at strip start", type: "number", min: 0, max: 300 },
+    { path: "layout.bottom_gap", label: "Bottom gap (stand)", type: "range", min: 0, max: 0.9, step: 0.01 },
+    { path: "layout.depth", label: "Sampling depth", type: "range", min: 0.02, max: 0.5, step: 0.01 },
+  ]},
+  { title: "Hardware & capture", controls: [
+    { path: "capture_source", label: "Capture source", type: "select", options: ["auto", "gamescope", "portal", "none"],
+      hint: "auto: gamescope in Game Mode, desktop portal otherwise." },
+    { path: "color_order", label: "Strip color order", type: "select", options: ["GRB", "RGB", "BRG", "BGR", "RBG", "GBR"] },
+    { path: "serial_port", label: "Serial port", type: "text", hint: "auto, or e.g. /dev/ttyACM0" },
+    { type: "button", label: "Request screen access again", action: () => requestCapture() },
+  ]},
+];
+
+let config = null;
+let pending = {};
+let sendTimer = null;
+const widgets = new Map();
+
+const get = (obj, path) => path.split(".").reduce((o, k) => o?.[k], obj);
+function setPatch(obj, path, value) {
+  const keys = path.split(".");
+  let o = obj;
+  keys.slice(0, -1).forEach(k => { o = o[k] ??= {}; });
+  o[keys.at(-1)] = value;
+}
+async function post(url, body) {
+  const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  return r.ok ? r.json() : null;
+}
+function queue(path, value) {
+  setPatch(pending, path, value);
+  setPatch(config, path, value);
+  clearTimeout(sendTimer);
+  sendTimer = setTimeout(async () => {
+    const patch = pending; pending = {};
+    const next = await post("/api/config", patch);
+    if (next) { config = next; refreshWidgets(); }
+  }, 120);
+}
+
+const describe = (c, v) => c.describe ? c.describe(v) : "";
+
+function buildPanels() {
+  const root = document.getElementById("panels");
+  for (const panel of PANELS) {
+    const d = document.createElement("details");
+    d.open = !!panel.open;
+    d.innerHTML = `<summary>${panel.title}</summary>`;
+    const grid = document.createElement("div");
+    grid.className = "controls";
+    for (const c of panel.controls) grid.appendChild(buildControl(c));
+    d.appendChild(grid);
+    root.appendChild(d);
+  }
+}
+function buildControl(c) {
+  const wrap = document.createElement("div");
+  wrap.className = "ctl";
+  if (c.type === "button") {
+    const b = document.createElement("button");
+    b.className = "secondary"; b.textContent = c.label; b.onclick = c.action;
+    wrap.appendChild(b);
+    return wrap;
+  }
+  if (c.type === "bool") {
+    wrap.className = "ctl toggle";
+    wrap.innerHTML = `<span>${c.label}</span>`;
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.onchange = () => queue(c.path, input.checked);
+    wrap.appendChild(input);
+    widgets.set(c.path, { c, input });
+    return wrap;
+  }
+  const label = document.createElement("label");
+  label.innerHTML = `<span>${c.label}</span><span></span>`;
+  wrap.appendChild(label);
+  let input;
+  if (c.type === "select") {
+    input = document.createElement("select");
+    for (const o of c.options) input.add(new Option(o, o));
+    input.onchange = () => queue(c.path, typeof c.options[0] === "number" ? Number(input.value) : input.value);
+  } else {
+    input = document.createElement("input");
+    input.type = c.type;
+    if (c.min !== undefined) input.min = c.min;
+    if (c.max !== undefined) input.max = c.max;
+    if (c.step !== undefined) input.step = c.step;
+    const numeric = c.type === "range" || c.type === "number";
+    const ev = c.type === "text" ? "change" : "input";
+    input.addEventListener(ev, () => {
+      const v = numeric ? Number(input.value) : input.value;
+      if (numeric && Number.isNaN(v)) return;
+      label.lastChild.textContent = c.type === "range" ? describe(c, v) : "";
+      queue(c.path, v);
+    });
+  }
+  let number = null;
+  if (c.type === "range") {
+    // Slider plus a number box for typing exact values; both stay in sync.
+    number = document.createElement("input");
+    number.type = "number";
+    number.min = c.min; number.max = c.max; number.step = c.step;
+    number.addEventListener("change", () => {
+      const v = Number(number.value);
+      if (Number.isNaN(v)) return;
+      input.value = v;
+      label.lastChild.textContent = describe(c, v);
+      queue(c.path, v);
+    });
+    input.addEventListener("input", () => { number.value = input.value; });
+    const row = document.createElement("div");
+    row.className = "range-row";
+    row.append(input, number);
+    wrap.appendChild(row);
+  } else {
+    wrap.appendChild(input);
+  }
+  if (c.hint) wrap.insertAdjacentHTML("beforeend", `<div class="hint">${c.hint}</div>`);
+  widgets.set(c.path, { c, input, number, value: label.lastChild });
+  return wrap;
+}
+function refreshWidgets() {
+  for (const [path, w] of widgets) {
+    if (document.activeElement === w.input || document.activeElement === w.number) continue;
+    const v = get(config, path);
+    if (v === undefined) continue;
+    if (w.c.type === "bool") w.input.checked = !!v;
+    else w.input.value = v;
+    if (w.number) w.number.value = v;
+    if (w.value) w.value.textContent = w.c.type === "range" ? describe(w.c, v) : "";
+  }
+}
+
+// ---- live preview ----
+const preview = document.getElementById("preview");
+const pctx = preview.getContext("2d");
+const thumbCanvas = document.createElement("canvas");
+const tctx = thumbCanvas.getContext("2d");
+let state = null;
+
+const toLin = v => Math.pow(v / 255, 2.2);
+const toEnc = v => Math.round(255 * Math.pow(Math.min(1, Math.max(0, v)), 1 / 2.2));
+function hexToLin(h) { const n = parseInt(h, 16); return [toLin(n >> 16 & 255), toLin(n >> 8 & 255), toLin(n & 255)]; }
+
+// Mirrors the Pico's mix so the preview shows what the strip does.
+function mixed(hex, floor, bass) {
+  const base = hexToLin(hex);
+  const bright = (config?.brightness ?? 255) / 255;
+  const share = config?.bass?.share ?? 0;
+  return base.map((b, i) => toEnc(bright * (b * ((1 - share) + share * bass) + floor[i] * bass)));
+}
+
+function drawPreview() {
+  const dpr = window.devicePixelRatio || 1;
+  const w = preview.clientWidth, h = preview.clientHeight;
+  if (preview.width !== Math.round(w * dpr)) { preview.width = Math.round(w * dpr); preview.height = Math.round(h * dpr); }
+  pctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  pctx.fillStyle = "#050608"; pctx.fillRect(0, 0, w, h);
+  if (!state) return;
+
+  const margin = Math.max(18, w * 0.07);
+  const tv = { x: margin, y: margin, w: w - 2 * margin, h: h - 2 * margin };
+  const floor = hexToLin(state.floor);
+  const pos = z => {
+    const [x, y, side] = z;
+    const out = margin * 0.55;
+    let px = tv.x + x * tv.w, py = tv.y + y * tv.h;
+    if (side === "l") px = tv.x - out; else if (side === "r") px = tv.x + tv.w + out;
+    else if (side === "t") py = tv.y - out; else if (side === "b") py = tv.y + tv.h + out;
+    return [px, py];
+  };
+
+  // Glow first, then the screen on top.
+  pctx.globalCompositeOperation = "lighter";
+  const r = Math.max(10, Math.min(tv.w, tv.h) * 0.09);
+  state.zones.forEach((z, i) => {
+    if (z[2] === "-") return;
+    const [x, y] = pos(z);
+    const [cr, cg, cb] = mixed(state.leds[i], floor, state.bass);
+    const g = pctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, `rgba(${cr},${cg},${cb},0.55)`);
+    g.addColorStop(1, `rgba(${cr},${cg},${cb},0)`);
+    pctx.fillStyle = g;
+    pctx.fillRect(x - r, y - r, 2 * r, 2 * r);
+  });
+  pctx.globalCompositeOperation = "source-over";
+
+  pctx.fillStyle = "#000";
+  pctx.fillRect(tv.x, tv.y, tv.w, tv.h);
+  if (thumbCanvas.width) {
+    pctx.imageSmoothingEnabled = true;
+    pctx.drawImage(thumbCanvas, tv.x, tv.y, tv.w, tv.h);
+  }
+  pctx.strokeStyle = "#2b3140"; pctx.lineWidth = 2;
+  pctx.strokeRect(tv.x, tv.y, tv.w, tv.h);
+
+  // LED dots; the first mapped LED gets a white ring so offset/direction are easy to check.
+  const firstMapped = state.zones.findIndex(z => z[2] !== "-");
+  const dotR = Math.max(1.5, Math.min(4, (2 * (tv.w + tv.h)) / Math.max(1, state.zones.length) / 3));
+  state.zones.forEach((z, i) => {
+    if (z[2] === "-") return;
+    const [x, y] = pos(z);
+    const [cr, cg, cb] = mixed(state.leds[i], floor, state.bass);
+    pctx.fillStyle = `rgb(${cr},${cg},${cb})`;
+    pctx.beginPath(); pctx.arc(x, y, dotR, 0, 2 * Math.PI); pctx.fill();
+    if (i === firstMapped) {
+      pctx.strokeStyle = "#fff"; pctx.lineWidth = 1.5;
+      pctx.beginPath(); pctx.arc(x, y, dotR + 3, 0, 2 * Math.PI); pctx.stroke();
+    }
+  });
+}
+
+// ---- bass history ----
+const graph = document.getElementById("bassGraph");
+const gctx = graph.getContext("2d");
+const HISTORY = 240;
+const history = [];
+function drawGraph() {
+  const dpr = window.devicePixelRatio || 1;
+  const w = graph.clientWidth, h = graph.clientHeight;
+  if (graph.width !== Math.round(w * dpr)) { graph.width = Math.round(w * dpr); graph.height = Math.round(h * dpr); }
+  gctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  gctx.clearRect(0, 0, w, h);
+  const line = (key, color) => {
+    gctx.strokeStyle = color; gctx.lineWidth = 1.5; gctx.beginPath();
+    history.forEach((p, i) => {
+      const x = (i / (HISTORY - 1)) * w, y = h - Math.min(1, p[key]) * (h - 4) - 2;
+      i ? gctx.lineTo(x, y) : gctx.moveTo(x, y);
+    });
+    gctx.stroke();
+  };
+  line("norm", "#4a5366");
+  line("bass", "#ff9a3c");
+  if (config?.bass) {
+    const y = h - config.bass.threshold * (h - 4) - 2;
+    gctx.strokeStyle = "#ef5a5a55"; gctx.setLineDash([4, 4]);
+    gctx.beginPath(); gctx.moveTo(0, y); gctx.lineTo(w, y); gctx.stroke(); gctx.setLineDash([]);
+  }
+}
+
+async function requestCapture() {
+  const btn = document.getElementById("captureRetry");
+  btn.disabled = true;
+  btn.textContent = "Requesting…";
+  await post("/api/capture/request", {});
+  setTimeout(() => { btn.disabled = false; btn.textContent = "Request screen access"; }, 3000);
+}
+document.getElementById("captureRetry").onclick = requestCapture;
+
+function chip(id, level, text) {
+  const el = document.getElementById(id);
+  el.querySelector(".dot").className = "dot " + level;
+  el.querySelector("b").textContent = text;
+}
+function renderStatus() {
+  const v = state.video, a = state.audio, p = state.pico;
+  chip("chipVideo", v.state === "streaming" ? "ok" : v.state === "error" || v.state === "denied" ? "bad" : "warn",
+       v.source === "none" ? v.state : `${v.source} ${v.fps.toFixed(0)}fps`);
+  chip("chipAudio", a.state === "streaming" ? "ok" : a.state.startsWith("error") ? "bad" : "warn", a.state);
+  chip("chipPico", p.connected ? "ok" : "bad", p.connected ? (p.fields.fps ? `${p.fields.fps}Hz` : "open") : "offline");
+  document.querySelector("#chipFps b").textContent = `${state.fps.toFixed(0)}fps`;
+  document.getElementById("videoMsg").textContent =
+    [v.width ? `${v.width}×${v.height} ${v.format}` : "", v.message].filter(Boolean).join(" · ");
+  const needsAccess = v.source === "none" && (v.state === "denied" || v.state === "error");
+  document.getElementById("captureBanner").hidden = !needsAccess;
+  document.getElementById("captureBannerText").textContent = v.state === "denied"
+    ? "Screen access was denied. Ask again, then approve the dialog on the TV."
+    : "Screen capture failed. Try asking again.";
+  document.getElementById("bassFill").style.width = `${(state.bass * 100).toFixed(1)}%`;
+  document.getElementById("bassVal").textContent = state.bass.toFixed(2);
+
+  const f = p.fields || {};
+  const stats = [
+    ["Capture", `${v.source} · ${v.state}`],
+    ["Gamescope node", v.gamescope_available ? "present" : "absent"],
+    ["LEDs", state.leds.length],
+    ["Pico port", p.port || "–"],
+    ["Pico refresh", f.fps ? `${f.fps} Hz` : "–"],
+    ["Pico rx", f.rx ? `${f.rx} frames/s · ${f.bass} bass/s` : "–"],
+    ["Bad packets", f.bad ?? "–"],
+    ["Board", f.board !== undefined ? `FireFly id ${f.board}` : "–"],
+    ["Strip current", f.ma ? `${f.ma} mA${Number(f.limited) ? " (limited)" : ""}` : "–"],
+    ["Sent frames / bass / dropped", `${p.sent} / ${p.bass_sent} / ${p.dropped}`],
+  ];
+  document.getElementById("stats").innerHTML = stats.map(([k, val]) => `<div><span>${k}</span>${val}</div>`).join("");
+  document.getElementById("picoLine").textContent = p.connected ? p.line : (p.error || "");
+}
+
+let lastConfigVersion = -1;
+async function pollState() {
+  try {
+    const r = await fetch("/api/state", { cache: "no-store" });
+    state = await r.json();
+    if (state.config_version !== lastConfigVersion && Object.keys(pending).length === 0) {
+      lastConfigVersion = state.config_version;
+      config = await (await fetch("/api/config", { cache: "no-store" })).json();
+      refreshWidgets();
+    }
+    const a = state.audio;
+    history.push({ bass: state.bass, norm: a.reference > 0 ? a.envelope / a.reference : 0 });
+    while (history.length > HISTORY) history.shift();
+    renderStatus();
+  } catch (e) { /* daemon restarting; keep polling */ }
+  setTimeout(pollState, 80);
+}
+async function pollThumb() {
+  try {
+    const r = await fetch("/api/thumb", { cache: "no-store" });
+    const w = Number(r.headers.get("X-Width")), h = Number(r.headers.get("X-Height"));
+    const rgb = new Uint8Array(await r.arrayBuffer());
+    if (w && h && rgb.length === w * h * 3) {
+      thumbCanvas.width = w; thumbCanvas.height = h;
+      const img = tctx.createImageData(w, h);
+      for (let i = 0, j = 0; i < rgb.length; i += 3, j += 4) {
+        img.data[j] = rgb[i]; img.data[j + 1] = rgb[i + 1]; img.data[j + 2] = rgb[i + 2]; img.data[j + 3] = 255;
+      }
+      tctx.putImageData(img, 0, 0);
+    }
+  } catch (e) { }
+  setTimeout(pollThumb, 200);
+}
+function frame() { drawPreview(); drawGraph(); requestAnimationFrame(frame); }
+
+buildPanels();
+pollState();
+pollThumb();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

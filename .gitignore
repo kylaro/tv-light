@@ -1,0 +1,5 @@
+firmware/external/
+firmware/build/
+host/build*/
+*.uf2
+!firmware/prebuilt/tvlight.uf2
