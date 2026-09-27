@@ -26,6 +26,7 @@ void Renderer::init(unsigned pin) { strip_.init(pin); }
 
 void Renderer::pick_up_frame(uint64_t now_us) {
   if (!store_.take(incoming_, seq_)) return;
+  const uint16_t previous_count = to_.led_count;
 
   if (have_frame_) {
     const int32_t interval = static_cast<int32_t>(now_us - last_frame_us_);
@@ -46,7 +47,12 @@ void Renderer::pick_up_frame(uint64_t now_us) {
   interp_start_us_ = now_us;
   last_frame_us_ = now_us;
   have_frame_ = true;
-  transmit_count_ = std::max(transmit_count_, incoming_.led_count);
+  if (incoming_.led_count < transmit_count_) {
+    // Arm once per shrink; re-arming every frame would never let it finish.
+    if (incoming_.led_count != previous_count) blank_refreshes_left_ = kBlankRefreshes;
+  } else {
+    transmit_count_ = incoming_.led_count;
+  }
 }
 
 void Renderer::pick_up_bass(uint64_t now_us) {
@@ -178,6 +184,7 @@ void Renderer::run() {
     strip_.transmit(words_[back].data(), transmit_count_);  // waits for previous transfer + latch
     back ^= 1;
     renders = renders + 1;
+    if (blank_refreshes_left_ > 0 && --blank_refreshes_left_ == 0) transmit_count_ = to_.led_count;
   }
 }
 

@@ -27,7 +27,7 @@ namespace tvlight::protocol {
 
 constexpr uint8_t kMagic[3] = {'T', 'V', 'L'};
 constexpr uint8_t kVersion = 3;
-constexpr uint16_t kMaxLeds = 600;
+constexpr uint16_t kMaxLeds = 1000;
 constexpr size_t kBytesPerLed = 3;
 constexpr size_t kChecksumBytes = 2;
 

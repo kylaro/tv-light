@@ -6,6 +6,8 @@
 #include <fstream>
 #include <iostream>
 
+#include "tvlight_protocol.h"
+
 namespace tvlight {
 namespace {
 constexpr int kMaxSideLeds = 300;
@@ -48,6 +50,7 @@ void sanitize(Config& c) {
   c.mode = valid_or(c.mode, {"ambient", "solid", "rainbow", "off"}, "ambient");
   c.capture_source = valid_or(c.capture_source, {"auto", "gamescope", "portal", "none"}, "auto");
   c.color_order = valid_or(c.color_order, {"RGB", "RBG", "GRB", "GBR", "BRG", "BGR"}, "GRB");
+  c.led_count = std::clamp(c.led_count, 0, static_cast<int>(protocol::kMaxLeds));
   c.brightness = std::clamp(c.brightness, 0, kMaxByte);
   c.max_current_ma = std::clamp(c.max_current_ma, 0, kMaxCurrentMa);
   c.fps = std::clamp(c.fps, kMinFps, kMaxFps);

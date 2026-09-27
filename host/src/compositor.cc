@@ -21,6 +21,11 @@ constexpr unsigned kRedShift = 16;
 constexpr unsigned kGreenShift = 8;
 constexpr uint32_t kByteMask = 0xFF;
 constexpr int kHueSectors = 6;
+// After the LED count changes, hold the first led_count LEDs green this long
+// so the strip length can be matched to the TV.
+constexpr double kIdentifyHoldSeconds = 5.0;
+constexpr Rgb kIdentifyColor = {0.0f, 1.0f, 0.0f};
+constexpr Rgb kBlack = {0.0f, 0.0f, 0.0f};
 
 uint8_t encode(float lin, double gamma) {
   const double v = std::pow(std::clamp(lin, 0.0f, 1.0f), 1.0 / gamma) * kMaxByte + kHalf;
@@ -114,7 +119,17 @@ void Compositor::step(double dt) {
     layout_changed = true;
   }
 
+  if (cfg.led_count != last_led_count_) {
+    if (last_led_count_ >= 0) identify_until_s_ = time_s_ + kIdentifyHoldSeconds;  // not on startup
+    last_led_count_ = cfg.led_count;
+  }
+  const bool identify = time_s_ < identify_until_s_;
+
   base_colors(cfg, target_);
+  const int mapped = static_cast<int>(target_.size());
+  // The strip may be longer (extra LEDs dark) or shorter (layout truncated) than the layout.
+  target_.resize(cfg.led_count, kBlack);
+  if (identify) std::fill(target_.begin(), target_.end(), kIdentifyColor);
   const Rgb white_balance = {static_cast<float>(cfg.white_r), static_cast<float>(cfg.white_g),
                              static_cast<float>(cfg.white_b)};
   for (Rgb& c : target_)
@@ -122,7 +137,7 @@ void Compositor::step(double dt) {
 
   // Exponential smoothing; test modes snap immediately.
   if (smoothed_.size() != target_.size()) smoothed_ = target_;
-  const bool smooth = cfg.mode == "ambient" && cfg.smoothing_ms > 0;
+  const bool smooth = cfg.mode == "ambient" && cfg.smoothing_ms > 0 && !identify;
   const float alpha = smooth ? static_cast<float>(1.0 - std::exp(-dt * 1000.0 / cfg.smoothing_ms)) : 1.0f;
   for (size_t i = 0; i < target_.size(); ++i)
     for (int k = 0; k < kRgb; ++k) smoothed_[i][k] += (target_[i][k] - smoothed_[i][k]) * alpha;
@@ -135,10 +150,10 @@ void Compositor::step(double dt) {
   Rgb floor = peak > kDarkFloorThreshold * std::max<size_t>(1, smoothed_.size())
                   ? Rgb{avg[0] / peak, avg[1] / peak, avg[2] / peak}
                   : white_balance;
-  for (float& f : floor) f *= static_cast<float>(cfg.bass.floor);
+  for (float& f : floor) f *= static_cast<float>(identify ? 0.0 : cfg.bass.floor);
 
   const float bass = cfg.mode == "off" ? 0.0f : audio_.bass();
-  serial_.post_frame(encode_packet(cfg, floor));
+  serial_.post_frame(encode_packet(cfg, floor, identify));
 
   // Web preview snapshot.
   ++frames_;
@@ -155,11 +170,14 @@ void Compositor::step(double dt) {
   if (layout_changed) snapshot_.zones = layout_.zones();
   snapshot_.floor = pack_display(floor);
   snapshot_.bass = bass;
+  snapshot_.identify_s = identify ? identify_until_s_ - time_s_ : 0.0;
+  snapshot_.led_count = cfg.led_count;
+  snapshot_.mapped = mapped;
   snapshot_.thumbnail.resize(static_cast<size_t>(kGridW) * kGridH * kRgb);
   for (size_t i = 0; i < snapshot_.thumbnail.size(); ++i) snapshot_.thumbnail[i] = encode(grid_.lin[i], cfg.screen_gamma);
 }
 
-std::vector<uint8_t> Compositor::encode_packet(const Config& cfg, const Rgb& floor) {
+std::vector<uint8_t> Compositor::encode_packet(const Config& cfg, const Rgb& floor, bool identify) {
   // Display RGB -> wire byte order, e.g. "GRB" puts green first.
   std::array<int, kRgb> order{};
   for (int k = 0; k < kRgb; ++k) order[k] = static_cast<int>(std::string("RGB").find(cfg.color_order[k]));
@@ -171,8 +189,10 @@ std::vector<uint8_t> Compositor::encode_packet(const Config& cfg, const Rgb& flo
   h.prefix.version = protocol::kVersion;
   h.prefix.kind = protocol::kKindFrame;
   h.led_count = count;
-  h.brightness = static_cast<uint8_t>(cfg.mode == "off" ? 0 : cfg.brightness);
-  h.always_on_share = static_cast<uint8_t>(std::lround((1.0 - cfg.bass.share) * protocol::kShareOne));
+  h.brightness = static_cast<uint8_t>(cfg.mode == "off" && !identify ? 0 : cfg.brightness);
+  // Identify: steady green, no bass pumping.
+  const double always_on = identify ? 1.0 : 1.0 - cfg.bass.share;
+  h.always_on_share = static_cast<uint8_t>(std::lround(always_on * protocol::kShareOne));
   for (int k = 0; k < kRgb; ++k) h.floor_color[k] = encode(floor[order[k]], kWireGamma);
   h.flags = (cfg.dither ? protocol::kFlagDither : 0) | (cfg.interpolate ? protocol::kFlagInterpolate : 0);
   h.gamma_tenths = protocol::kGammaTenthsDefault;

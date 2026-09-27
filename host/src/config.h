@@ -49,6 +49,7 @@ struct Config {
   std::string portal_restore_token;
   std::string serial_port = "auto";
   std::string color_order = "GRB";
+  int led_count = 124;                   // physical strip length; LEDs past the layout stay dark
   int brightness = 200;                  // 0..255
   int max_current_ma = 2000;             // strip budget; 0 = unlimited
   int fps = 60;                          // LED frames per second (bass pump rate)
@@ -76,7 +77,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(BassConfig, enabled, lowpass_hz,
                                                 agc, agc_decay_s, sensitivity, threshold, curve, share,
                                                 smoothing_ms, floor)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(Config, mode, solid_color, capture_source, portal_restore_token,
-                                                serial_port, color_order, brightness, max_current_ma, fps, capture_fps, audio_block,
+                                                serial_port, color_order, led_count, brightness, max_current_ma, fps, capture_fps, audio_block,
                                                 web_port,
                                                 screen_gamma, saturation, smoothing_ms, white_r, white_g, white_b,
                                                 dither, interpolate, layout, bass)

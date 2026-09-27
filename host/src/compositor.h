@@ -23,6 +23,9 @@ struct Snapshot {
   uint32_t floor = 0;
   float bass = 0;
   double fps = 0;
+  double identify_s = 0;            // > 0 while the strip is held green after an LED count change
+  int led_count = 0;
+  int mapped = 0;                   // LEDs covered by the layout
   std::vector<uint8_t> thumbnail;   // kGridW x kGridH RGB, gamma encoded
 };
 
@@ -35,7 +38,7 @@ class Compositor {
 
  private:
   void base_colors(const Config& cfg, std::vector<Rgb>& out);
-  std::vector<uint8_t> encode_packet(const Config& cfg, const Rgb& floor);
+  std::vector<uint8_t> encode_packet(const Config& cfg, const Rgb& floor, bool identify);
 
   ConfigStore& config_;
   VideoCapture& video_;
@@ -48,6 +51,8 @@ class Compositor {
   std::vector<Rgb> target_;
   std::vector<Rgb> smoothed_;
   double time_s_ = 0;
+  int last_led_count_ = -1;
+  double identify_until_s_ = 0;
 
   mutable std::mutex mutex_;
   Snapshot snapshot_;

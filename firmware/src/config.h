@@ -40,6 +40,10 @@ constexpr uint32_t kBassTimeoutUs = 100000;  // no bass packets (audio idle) -> 
 constexpr uint32_t kMilliampsPerChannel = 20;
 constexpr uint32_t kIdleMicroampsPerLed = 1000;
 
+// When the strip gets shorter, keep sending the old length this many times so
+// the now-unused LEDs are blanked, then drop back to the short (faster) length.
+constexpr uint32_t kBlankRefreshes = 3;
+
 constexpr uint32_t kStatusIntervalMs = 1000;
 // Status LED: heartbeat toggle every second while idle; toggles on every packet while the PC talks.
 constexpr uint32_t kHeartbeatMs = 1000;

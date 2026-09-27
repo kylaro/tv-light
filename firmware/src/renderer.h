@@ -50,7 +50,8 @@ class Renderer {
   uint32_t interp_len_us_ = kDefaultInterpUs;
   uint64_t last_frame_us_ = 0;
   bool have_frame_ = false;
-  uint16_t transmit_count_ = 0;
+  uint16_t transmit_count_ = 0;  // LEDs clocked out; > led_count while blanking a shrink
+  uint32_t blank_refreshes_left_ = 0;
 
   std::array<uint32_t, kChannels> mixed_{};      // linear, can exceed 16 bits pre-limit
   std::array<uint8_t, kChannels> dither_err_{};

@@ -15,8 +15,11 @@ using namespace tvlight::fw;
 constexpr uint32_t kPollTimeoutUs = 2000;
 constexpr uint32_t kPullSettleUs = 10;
 
+// Big objects live in .bss: the default core stacks are only 2 KB each, and the
+// receiver's packet buffer alone is ~3 KB at kMaxLeds.
 FrameStore g_store;
 Renderer g_renderer(g_store);
+FrameReceiver g_receiver(g_store);
 
 void core1_main() { g_renderer.run(); }
 
@@ -48,7 +51,7 @@ int main() {
   g_renderer.init(kLedDataPin);
   multicore_launch_core1(core1_main);
 
-  FrameReceiver receiver(g_store);
+  FrameReceiver& receiver = g_receiver;
   absolute_time_t next_status = make_timeout_time_ms(kStatusIntervalMs);
   absolute_time_t next_heartbeat = make_timeout_time_ms(kHeartbeatMs);
   uint32_t renders_at_last_status = 0;

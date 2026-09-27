@@ -83,6 +83,7 @@
     <h2>Preview</h2>
     <canvas id="preview"></canvas>
     <div class="msg" id="videoMsg"></div>
+    <div class="banner" id="identifyBanner" hidden></div>
     <div class="banner" id="captureBanner" hidden>
       <span id="captureBannerText">Screen access was denied.</span>
       <button id="captureRetry">Request screen access</button>
@@ -152,7 +153,9 @@ const PANELS = [
     { path: "white_g", label: "White balance G", type: "range", min: 0, max: 1, step: 0.01 },
     { path: "white_b", label: "White balance B", type: "range", min: 0, max: 1, step: 0.01 },
   ]},
-  { title: "LED layout", controls: [
+  { title: "LEDs & layout", controls: [
+    { path: "led_count", label: "Strip LED count", type: "range", min: 0, max: 1000, step: 1,
+      hint: "Changing this lights the first N LEDs green for 5 s so you can find the end of the strip." },
     { path: "layout.left", label: "Left LEDs", type: "number", min: 0, max: 300 },
     { path: "layout.top", label: "Top LEDs", type: "number", min: 0, max: 300 },
     { path: "layout.right", label: "Right LEDs", type: "number", min: 0, max: 300 },
@@ -337,7 +340,7 @@ function drawPreview() {
   pctx.globalCompositeOperation = "lighter";
   const r = Math.max(10, Math.min(tv.w, tv.h) * 0.09);
   state.zones.forEach((z, i) => {
-    if (z[2] === "-") return;
+    if (z[2] === "-" || i >= state.leds.length) return;
     const [x, y] = pos(z);
     const [cr, cg, cb] = mixed(state.leds[i], floor, state.bass);
     const g = pctx.createRadialGradient(x, y, 0, x, y, r);
@@ -361,7 +364,7 @@ function drawPreview() {
   const firstMapped = state.zones.findIndex(z => z[2] !== "-");
   const dotR = Math.max(1.5, Math.min(4, (2 * (tv.w + tv.h)) / Math.max(1, state.zones.length) / 3));
   state.zones.forEach((z, i) => {
-    if (z[2] === "-") return;
+    if (z[2] === "-" || i >= state.leds.length) return;
     const [x, y] = pos(z);
     const [cr, cg, cb] = mixed(state.leds[i], floor, state.bass);
     pctx.fillStyle = `rgb(${cr},${cg},${cb})`;
@@ -424,6 +427,9 @@ function renderStatus() {
   document.querySelector("#chipFps b").textContent = `${state.fps.toFixed(0)}fps`;
   document.getElementById("videoMsg").textContent =
     [v.width ? `${v.width}×${v.height} ${v.format}` : "", v.message].filter(Boolean).join(" · ");
+  const idBanner = document.getElementById("identifyBanner");
+  idBanner.hidden = !(state.identify_s > 0);
+  idBanner.textContent = `Strip test: first ${state.led_count} LEDs green (${state.identify_s.toFixed(1)} s)`;
   const needsAccess = v.source === "none" && (v.state === "denied" || v.state === "error");
   document.getElementById("captureBanner").hidden = !needsAccess;
   document.getElementById("captureBannerText").textContent = v.state === "denied"
@@ -436,7 +442,7 @@ function renderStatus() {
   const stats = [
     ["Capture", `${v.source} · ${v.state}`],
     ["Gamescope node", v.gamescope_available ? "present" : "absent"],
-    ["LEDs", state.leds.length],
+    ["LEDs", `${state.led_count} on strip · ${state.mapped} mapped by layout`],
     ["Pico port", p.port || "–"],
     ["Pico refresh", f.fps ? `${f.fps} Hz` : "–"],
     ["Pico rx", f.rx ? `${f.rx} frames/s · ${f.bass} bass/s` : "–"],
