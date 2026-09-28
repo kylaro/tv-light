@@ -28,9 +28,8 @@ std::string valid_or(const std::string& v, std::initializer_list<const char*> al
 
 void sanitize(Config& c) {
   auto& l = c.layout;
-  for (int* side : {&l.top, &l.right, &l.bottom, &l.left}) *side = std::clamp(*side, 0, kMaxSideLeds);
-  l.skip = std::clamp(l.skip, 0, kMaxSideLeds);
-  l.direction = valid_or(l.direction, {"cw", "ccw"}, "cw");
+  for (int* segment : {&l.skip, &l.bottom_left, &l.left, &l.top, &l.right, &l.bottom_right})
+    *segment = std::clamp(*segment, 0, kMaxSideLeds);
   l.depth = std::clamp(l.depth, 0.02, 0.5);
   l.bottom_gap = std::clamp(l.bottom_gap, 0.0, 0.9);
 

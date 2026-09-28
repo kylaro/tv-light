@@ -1,5 +1,6 @@
 #include "frame_receiver.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstring>
@@ -107,6 +108,7 @@ void FrameReceiver::accept_frame() {
   f.always_on_share = header.always_on_share;
   f.flags = header.flags;
   f.max_current_ma = header.max_current_ma;
+  f.dark_leds = std::min(header.dark_leds, header.led_count);
   for (size_t c = 0; c < protocol::kBytesPerLed; ++c) f.floor_lin[c] = gamma_lut_[header.floor_color[c]];
   for (size_t i = 0; i < channels; ++i) f.lin[i] = gamma_lut_[colors[i]];
   store_.publish();

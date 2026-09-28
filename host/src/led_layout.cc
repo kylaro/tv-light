@@ -13,55 +13,46 @@ struct Rect {
 };
 
 constexpr float kHalf = 0.5f;
-
-// Bottom LEDs run right -> left and skip a centered gap for the TV stand.
-float bottom_x_from_right(float along, float gap) {
-  const float half_run = (1.0f - gap) * kHalf;
-  return along < half_run ? 1.0f - along : 1.0f - along - gap;
-}
+constexpr std::array<char, kSegmentCount> kSegmentSide = {'-', 'b', 'l', 't', 'r', 'b'};
 }  // namespace
+
+int segment_from_name(const std::string& name) {
+  for (int s = 0; s < kSegmentCount; ++s)
+    if (name == kSegmentNames[s]) return s;
+  return kNoSegment;
+}
 
 void LedLayout::build(const LayoutConfig& cfg, int grid_w, int grid_h) {
   // Band depth in equal screen pixels on all sides, assuming the grid's aspect.
   const float depth_y = static_cast<float>(cfg.depth);
   const float depth_x = depth_y * static_cast<float>(grid_h) / static_cast<float>(grid_w);
-  const float gap = static_cast<float>(cfg.bottom_gap);
+  // Each bottom half spans from its corner to the centered stand gap.
+  const float half_run = (1.0f - static_cast<float>(cfg.bottom_gap)) * kHalf;
 
-  // Loop order (clockwise seen from the front): left up, top rightwards, right down, bottom leftwards.
-  std::vector<std::pair<Rect, char>> loop;
-  for (int i = 0; i < cfg.left; ++i) {
-    const float a = static_cast<float>(i) / cfg.left, b = static_cast<float>(i + 1) / cfg.left;
-    loop.push_back({{0.0f, 1.0f - b, depth_x, 1.0f - a}, 'l'});
-  }
-  for (int i = 0; i < cfg.top; ++i) {
-    const float a = static_cast<float>(i) / cfg.top, b = static_cast<float>(i + 1) / cfg.top;
-    loop.push_back({{a, 0.0f, b, depth_y}, 't'});
-  }
-  for (int i = 0; i < cfg.right; ++i) {
-    const float a = static_cast<float>(i) / cfg.right, b = static_cast<float>(i + 1) / cfg.right;
-    loop.push_back({{1.0f - depth_x, a, 1.0f, b}, 'r'});
-  }
-  const float run = 1.0f - gap;
-  for (int i = 0; i < cfg.bottom; ++i) {
-    const float a = run * i / cfg.bottom, b = run * (i + 1) / cfg.bottom;
-    const float xa = bottom_x_from_right(a, gap), xb = bottom_x_from_right(b, gap);
-    loop.push_back({{std::min(xa, xb), 1.0f - depth_y, std::max(xa, xb), 1.0f}, 'b'});
-  }
+  // Mapped LEDs in strip order; `a`..`b` is the LED's fraction along its segment.
+  std::vector<std::pair<Rect, int>> strip;
+  auto add = [&](int count, int segment, auto rect_at) {
+    for (int i = 0; i < count; ++i) {
+      const float a = static_cast<float>(i) / count, b = static_cast<float>(i + 1) / count;
+      strip.push_back({rect_at(a, b), segment});
+    }
+  };
+  add(cfg.bottom_left, kSegBottomLeft,
+      [&](float a, float b) { return Rect{half_run * (1.0f - b), 1.0f - depth_y, half_run * (1.0f - a), 1.0f}; });
+  add(cfg.left, kSegLeft, [&](float a, float b) { return Rect{0.0f, 1.0f - b, depth_x, 1.0f - a}; });
+  add(cfg.top, kSegTop, [&](float a, float b) { return Rect{a, 0.0f, b, depth_y}; });
+  add(cfg.right, kSegRight, [&](float a, float b) { return Rect{1.0f - depth_x, a, 1.0f, b}; });
+  add(cfg.bottom_right, kSegBottomRight,
+      [&](float a, float b) { return Rect{1.0f - half_run * b, 1.0f - depth_y, 1.0f - half_run * a, 1.0f}; });
 
-  const int n = static_cast<int>(loop.size());
-  if (n == 0) {
-    zones_.assign(std::min<int>(cfg.skip, protocol::kMaxLeds), LedZone{});
-    return;
-  }
-  const int total = std::min<int>(cfg.skip + n, protocol::kMaxLeds);
+  const int skip = std::min<int>(cfg.skip, protocol::kMaxLeds);
+  const int total = std::min<int>(skip + static_cast<int>(strip.size()), protocol::kMaxLeds);
   zones_.assign(total, LedZone{});
-  for (int k = cfg.skip; k < total; ++k) {
-    const int strip = k - cfg.skip;
-    const int step = cfg.direction == "ccw" ? -strip : strip;
-    const int p = ((cfg.offset + step) % n + n) % n;
-    const auto& [r, side] = loop[p];
+  for (int k = skip; k < total; ++k) {
+    const auto& [r, segment] = strip[k - skip];
     LedZone& z = zones_[k];
-    z.side = side;
+    z.segment = segment;
+    z.side = kSegmentSide[segment];
     z.x = (r.x0 + r.x1) * kHalf;
     z.y = (r.y0 + r.y1) * kHalf;
     int nearest = 0;

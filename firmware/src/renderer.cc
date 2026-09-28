@@ -120,11 +120,14 @@ void Renderer::render(uint64_t now_us, uint32_t* out_words) {
   uint32_t floor_term[protocol::kBytesPerLed];
   for (size_t c = 0; c < protocol::kBytesPerLed; ++c) floor_term[c] = (shown_floor_[c] * bass) >> kQ16Shift;
 
+  // Skipped leading LEDs stay off: the host sends them black, but the floor would still pump them.
+  const size_t dark_channels = static_cast<size_t>(f.dark_leds) * protocol::kBytesPerLed;
   uint64_t channel_sum = 0;
   for (size_t i = 0; i < channels; ++i) {
     const uint16_t base = lerp16(from_.lin[i], f.lin[i], t_q16);
     shown_[i] = base;
-    const uint64_t pumped = ((static_cast<uint64_t>(base) * pump_q16) >> kQ16Shift) + floor_term[i % protocol::kBytesPerLed];
+    const uint32_t floor = i < dark_channels ? 0 : floor_term[i % protocol::kBytesPerLed];
+    const uint64_t pumped = ((static_cast<uint64_t>(base) * pump_q16) >> kQ16Shift) + floor;
     const uint64_t v = (pumped * scale_q24) >> (kByteShift + kQ16Shift);
     const uint32_t clamped = static_cast<uint32_t>(std::min<uint64_t>(v, kMax16));
     mixed_[i] = clamped;

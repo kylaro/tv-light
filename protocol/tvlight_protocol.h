@@ -17,7 +17,7 @@
 // brightness, current limiting and temporal dithering, then drives the strip.
 //
 // Pico -> host: newline terminated ASCII status lines, e.g.
-//   "TVL fw=3 board=0 fps=245 rx=60 bass=188 bad=0 leds=124 ma=2310 limited=0"
+//   "TVL fw=4 board=0 fps=245 rx=60 bass=188 bad=0 leds=124 ma=2310 limited=0"
 #pragma once
 
 #include <cstddef>
@@ -26,7 +26,7 @@
 namespace tvlight::protocol {
 
 constexpr uint8_t kMagic[3] = {'T', 'V', 'L'};
-constexpr uint8_t kVersion = 3;
+constexpr uint8_t kVersion = 4;
 constexpr uint16_t kMaxLeds = 1000;
 constexpr size_t kBytesPerLed = 3;
 constexpr size_t kChecksumBytes = 2;
@@ -63,6 +63,7 @@ struct FrameHeader {
   uint8_t flags;            // Flags
   uint8_t gamma_tenths;     // gamma exponent * 10 (22 -> 2.2)
   uint16_t max_current_ma;  // strip current budget, 0 = unlimited
+  uint16_t dark_leds;       // leading LEDs held off entirely (skipped, no bass floor)
 };
 
 struct BassPacket {
@@ -72,7 +73,7 @@ struct BassPacket {
 #pragma pack(pop)
 
 static_assert(sizeof(PacketPrefix) == 5, "PacketPrefix must be packed");
-static_assert(sizeof(FrameHeader) == 16, "FrameHeader must be packed");
+static_assert(sizeof(FrameHeader) == 18, "FrameHeader must be packed");
 static_assert(sizeof(BassPacket) == 7, "BassPacket must be packed");
 
 constexpr size_t frame_packet_size(uint16_t led_count) {

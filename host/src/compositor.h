@@ -2,6 +2,7 @@
 #pragma once
 
 #include <array>
+#include <chrono>
 #include <cstdint>
 #include <mutex>
 #include <vector>
@@ -24,6 +25,7 @@ struct Snapshot {
   float bass = 0;
   double fps = 0;
   double identify_s = 0;            // > 0 while the strip is held green after an LED count change
+  int calibrate_segment = kNoSegment;  // segment lit white for calibration
   int led_count = 0;
   int mapped = 0;                   // LEDs covered by the layout
   std::vector<uint8_t> thumbnail;   // kGridW x kGridH RGB, gamma encoded
@@ -35,10 +37,14 @@ class Compositor {
   // Produces and sends one frame; `dt` is seconds since the previous call.
   void step(double dt);
   Snapshot snapshot() const;
+  // Lights only `segment` white (everything else off) until the hold expires;
+  // the web UI refreshes it while the calibration card is open. kNoSegment ends it.
+  void calibrate(int segment);
 
  private:
   void base_colors(const Config& cfg, std::vector<Rgb>& out);
-  std::vector<uint8_t> encode_packet(const Config& cfg, const Rgb& floor, bool identify);
+  std::vector<uint8_t> encode_packet(const Config& cfg, const Rgb& floor, bool test_pattern);
+  int active_calibration() const;  // kNoSegment when idle or expired
 
   ConfigStore& config_;
   VideoCapture& video_;
@@ -55,6 +61,8 @@ class Compositor {
   double identify_until_s_ = 0;
 
   mutable std::mutex mutex_;
+  int calibrate_segment_ = kNoSegment;
+  std::chrono::steady_clock::time_point calibrate_until_;
   Snapshot snapshot_;
   uint64_t frames_ = 0;
   double fps_window_s_ = 0;

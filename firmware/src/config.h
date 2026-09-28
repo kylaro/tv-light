@@ -47,7 +47,7 @@ constexpr uint32_t kBlankRefreshes = 3;
 constexpr uint32_t kStatusIntervalMs = 1000;
 // Status LED: heartbeat toggle every second while idle; toggles on every packet while the PC talks.
 constexpr uint32_t kHeartbeatMs = 1000;
-constexpr uint32_t kFirmwareVersion = 3;
+constexpr uint32_t kFirmwareVersion = 4;
 
 constexpr size_t kChannels = protocol::kMaxLeds * protocol::kBytesPerLed;
 

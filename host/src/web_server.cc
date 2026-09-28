@@ -2,6 +2,7 @@
 
 #include <cstdio>
 #include <iostream>
+#include <stdexcept>
 
 #include "audio_capture.h"
 #include "compositor.h"
@@ -53,7 +54,7 @@ bool WebServer::start(int port) {
     json leds = json::array();
     for (uint32_t c : snap.leds) leds.push_back(hex(c));
     json zones = json::array();
-    for (const LedZone& z : snap.zones) zones.push_back({z.x, z.y, std::string(1, z.side)});
+    for (const LedZone& z : snap.zones) zones.push_back({z.x, z.y, std::string(1, z.side), z.segment});
 
     json j = {
         {"fps", snap.fps},
@@ -62,6 +63,7 @@ bool WebServer::start(int port) {
         {"floor", hex(snap.floor)},
         {"bass", snap.bass},
         {"identify_s", snap.identify_s},
+        {"calibrate", snap.calibrate_segment == kNoSegment ? json(nullptr) : json(kSegmentNames[snap.calibrate_segment])},
         {"led_count", snap.led_count},
         {"mapped", snap.mapped},
         {"config_version", config_.version()},
@@ -112,6 +114,21 @@ bool WebServer::start(int port) {
       json j = config_.patch(patch);
       j.erase("portal_restore_token");
       res.set_content(j.dump(), kJson);
+    } catch (const std::exception& e) {
+      res.status = kBadRequest;
+      res.set_content(json{{"error", e.what()}}.dump(), kJson);
+    }
+  });
+
+  // {"segment": "left"} lights that segment white for calibration; {"segment": null} ends it.
+  s.Post("/api/calibrate", [this](const httplib::Request& req, httplib::Response& res) {
+    try {
+      const json body = json::parse(req.body);
+      const json& name = body.at("segment");
+      const int segment = name.is_null() ? kNoSegment : segment_from_name(name.get<std::string>());
+      if (!name.is_null() && segment == kNoSegment) throw std::invalid_argument("unknown segment");
+      compositor_.calibrate(segment);
+      res.set_content(R"({"ok":true})", kJson);
     } catch (const std::exception& e) {
       res.status = kBadRequest;
       res.set_content(json{{"error", e.what()}}.dump(), kJson);

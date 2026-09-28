@@ -65,6 +65,13 @@
             background: #2a1c14; border: 1px solid #5a3a22; }
   .banner[hidden] { display: none; }
   code { font-size: 12px; color: var(--dim); }
+  .cal-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+  .cal-chips .chip { cursor: pointer; }
+  .cal-chips .chip.active { border-color: var(--accent); color: var(--text); }
+  .cal-name { font-size: 18px; font-weight: 600; }
+  .stepper { display: flex; gap: 8px; align-items: center; margin: 10px 0; }
+  .stepper button { min-width: 64px; font-size: 24px; padding: 8px 14px; }
+  .stepper input[type=number] { flex: 1; min-width: 0; text-align: center; font-size: 24px; padding: 8px; }
 </style>
 </head>
 <body>
@@ -87,6 +94,33 @@
     <div class="banner" id="captureBanner" hidden>
       <span id="captureBannerText">Screen access was denied.</span>
       <button id="captureRetry">Request screen access</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Strip calibration</h2>
+    <div id="calIdle">
+      <div class="msg">Set the LED count of each segment in order. Only the segment you are adjusting lights up white,
+        so grow or shrink it until the white LEDs exactly fill that edge, then go to the next one.
+        Left and right are as you face the TV.</div>
+      <div class="row" style="margin-top:10px"><button id="calStart">Start calibration</button></div>
+    </div>
+    <div id="calActive" hidden>
+      <div class="cal-chips" id="calChips"></div>
+      <div class="msg" id="calStep"></div>
+      <div class="cal-name" id="calName"></div>
+      <div class="msg" id="calHint"></div>
+      <div class="stepper">
+        <button class="secondary" id="calMinus" aria-label="One fewer LED">−</button>
+        <input type="number" id="calCount" min="0" max="300" step="1" inputmode="numeric">
+        <button class="secondary" id="calPlus" aria-label="One more LED">+</button>
+      </div>
+      <div class="row">
+        <button class="secondary" id="calBack">Back</button>
+        <button id="calNext">Next</button>
+        <button class="secondary" id="calStop">Stop</button>
+      </div>
+      <div class="msg" id="calTotal"></div>
     </div>
   </section>
 
@@ -156,14 +190,13 @@ const PANELS = [
   { title: "LEDs & layout", controls: [
     { path: "led_count", label: "Strip LED count", type: "range", min: 0, max: 1000, step: 1,
       hint: "Changing this lights the first N LEDs green for 5 s so you can find the end of the strip." },
+    { path: "layout.skip", label: "Skipped LEDs at strip start", type: "number", min: 0, max: 300 },
+    { path: "layout.bottom_left", label: "Bottom, left half LEDs", type: "number", min: 0, max: 300,
+      hint: "Strip order: bottom middle → bottom-left corner → left → top → right → back to the bottom middle. Easiest with Strip calibration above." },
     { path: "layout.left", label: "Left LEDs", type: "number", min: 0, max: 300 },
     { path: "layout.top", label: "Top LEDs", type: "number", min: 0, max: 300 },
     { path: "layout.right", label: "Right LEDs", type: "number", min: 0, max: 300 },
-    { path: "layout.bottom", label: "Bottom LEDs", type: "number", min: 0, max: 300 },
-    { path: "layout.offset", label: "Offset (loop position of first LED)", type: "number", min: -1000, max: 1000,
-      hint: "Loop starts bottom-left, going up the left side. Watch the white marker in the preview." },
-    { path: "layout.direction", label: "Direction (seen from the front)", type: "select", options: ["cw", "ccw"] },
-    { path: "layout.skip", label: "Skipped LEDs at strip start", type: "number", min: 0, max: 300 },
+    { path: "layout.bottom_right", label: "Bottom, right half LEDs", type: "number", min: 0, max: 300 },
     { path: "layout.bottom_gap", label: "Bottom gap (stand)", type: "range", min: 0, max: 0.9, step: 0.01 },
     { path: "layout.depth", label: "Sampling depth", type: "range", min: 0.02, max: 0.5, step: 0.01 },
   ]},
@@ -295,7 +328,78 @@ function refreshWidgets() {
     if (w.number) w.number.value = v;
     if (w.value) w.value.textContent = w.c.type === "range" ? describe(w.c, v) : "";
   }
+  renderCalibration();
 }
+
+// ---- strip calibration: one segment at a time, lit white on the strip ----
+const CAL_STEPS = [
+  { key: "skip", short: "Skipped", name: "Skipped LEDs at the start",
+    hint: "LEDs before the strip reaches the bottom middle of the TV (hidden or sacrificial). They stay off in normal use. Use 0 if the first LED is already in place." },
+  { key: "bottom_left", short: "Bottom L", name: "Bottom, left half",
+    hint: "From the bottom middle to the bottom-left corner." },
+  { key: "left", short: "Left", name: "Left side", hint: "From the bottom-left corner up to the top-left corner." },
+  { key: "top", short: "Top", name: "Top", hint: "From the top-left corner across to the top-right corner." },
+  { key: "right", short: "Right", name: "Right side", hint: "From the top-right corner down to the bottom-right corner." },
+  { key: "bottom_right", short: "Bottom R", name: "Bottom, right half",
+    hint: "From the bottom-right corner back toward the middle, to the end of the strip." },
+];
+const CAL_MAX = 300;
+const CAL_REFRESH_MS = 3000;  // the daemon drops the highlight 10 s after the last refresh
+let calStep = -1;             // -1 = not calibrating
+
+const calCount = key => config?.layout?.[key] ?? 0;
+const calTotal = () => CAL_STEPS.reduce((n, s) => n + calCount(s.key), 0);
+function calSend() {
+  post("/api/calibrate", { segment: calStep >= 0 ? CAL_STEPS[calStep].key : null });
+}
+function calGo(step) {
+  calStep = step;
+  calSend();
+  renderCalibration();
+}
+function calSet(n) {
+  if (calStep < 0 || Number.isNaN(n)) return;
+  queue(`layout.${CAL_STEPS[calStep].key}`, Math.min(CAL_MAX, Math.max(0, Math.round(n))));
+  renderCalibration();
+}
+function calFinish() {
+  // The strip is exactly the calibrated segments; its end then flashes green for 5 s as a check.
+  queue("led_count", calTotal());
+  calGo(-1);
+}
+function renderCalibration() {
+  const active = calStep >= 0;
+  document.getElementById("calIdle").hidden = active;
+  document.getElementById("calActive").hidden = !active;
+  if (!active || !config) return;
+  const s = CAL_STEPS[calStep];
+  const chips = document.getElementById("calChips");
+  chips.innerHTML = "";
+  CAL_STEPS.forEach((c, i) => {
+    const el = document.createElement("span");
+    el.className = "chip" + (i === calStep ? " active" : "");
+    el.innerHTML = `${c.short} <b>${calCount(c.key)}</b>`;
+    el.onclick = () => calGo(i);
+    chips.appendChild(el);
+  });
+  document.getElementById("calStep").textContent = `Step ${calStep + 1} of ${CAL_STEPS.length}`;
+  document.getElementById("calName").textContent = s.name;
+  document.getElementById("calHint").textContent = s.hint;
+  const input = document.getElementById("calCount");
+  if (document.activeElement !== input) input.value = calCount(s.key);
+  document.getElementById("calBack").disabled = calStep === 0;
+  document.getElementById("calNext").textContent = calStep === CAL_STEPS.length - 1 ? "Done" : "Next";
+  document.getElementById("calTotal").textContent =
+    `Total ${calTotal()} LEDs · strip length setting ${config.led_count} (set to the total when you tap Done)`;
+}
+document.getElementById("calStart").onclick = () => calGo(0);
+document.getElementById("calMinus").onclick = () => calSet(calCount(CAL_STEPS[calStep].key) - 1);
+document.getElementById("calPlus").onclick = () => calSet(calCount(CAL_STEPS[calStep].key) + 1);
+document.getElementById("calCount").addEventListener("input", e => { if (e.target.value !== "") calSet(Number(e.target.value)); });
+document.getElementById("calBack").onclick = () => calGo(Math.max(0, calStep - 1));
+document.getElementById("calNext").onclick = () => calStep === CAL_STEPS.length - 1 ? calFinish() : calGo(calStep + 1);
+document.getElementById("calStop").onclick = () => calGo(-1);
+setInterval(() => { if (calStep >= 0) calSend(); }, CAL_REFRESH_MS);
 
 // ---- live preview ----
 const preview = document.getElementById("preview");

@@ -16,6 +16,7 @@ struct LinearFrame {
   uint8_t always_on_share = 0;
   uint8_t flags = 0;
   uint16_t max_current_ma = 0;
+  uint16_t dark_leds = 0;
   std::array<uint16_t, protocol::kBytesPerLed> floor_lin{};
   std::array<uint16_t, kChannels> lin{};
 };

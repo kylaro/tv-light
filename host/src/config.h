@@ -11,17 +11,15 @@
 namespace tvlight {
 
 struct LayoutConfig {
-  // LEDs per side, viewed from the front of the TV.
+  // LEDs per segment in strip order, viewed from the front of the TV: the strip
+  // starts at the bottom middle and runs clockwise (bottom left half, left side
+  // upwards, top rightwards, right side downwards, bottom right half).
+  int skip = 0;              // leading strip LEDs before the bottom middle; kept dark
+  int bottom_left = 20;
+  int left = 22;
   int top = 40;
   int right = 22;
-  int bottom = 40;
-  int left = 22;
-  // The loop starts at the bottom-left corner going up the left side (clockwise
-  // seen from the front). `offset` is the loop position of the first mapped
-  // strip LED; `direction` is "cw" or "ccw" travel from there.
-  int offset = 0;
-  std::string direction = "cw";
-  int skip = 0;              // leading strip LEDs that are not mapped (e.g. a sacrificial pixel)
+  int bottom_right = 20;
   double depth = 0.15;       // sampling band depth, fraction of screen height/width
   double bottom_gap = 0.0;   // centered fraction of the bottom edge without LEDs (TV stand)
 };
@@ -71,8 +69,8 @@ struct Config {
 };
 
 // Missing keys keep their defaults, so old config files keep loading.
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(LayoutConfig, top, right, bottom, left, offset, direction, skip,
-                                                depth, bottom_gap)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(LayoutConfig, skip, bottom_left, left, top, right, bottom_right, depth,
+                                                bottom_gap)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(BassConfig, enabled, lowpass_hz, highpass_hz, attack_ms, release_ms,
                                                 agc, agc_decay_s, sensitivity, threshold, curve, share,
                                                 smoothing_ms, floor)
